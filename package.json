@@ -1,0 +1,42 @@
+{
+  "name": "siru",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "reservations:expire": "tsx scripts/expire-reservations.ts",
+    "reservations:backfill-cards": "tsx scripts/backfill-approval-cards.ts",
+    "dev:credentials": "tsx scripts/seed-dev-credentials.ts",
+    "demo:reset-rooms": "tsx scripts/reset-demo-rooms.ts",
+    "postinstall": "prisma generate",
+    "db:test:push": "cross-env DATABASE_URL=file:./test.db prisma db push --skip-generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.13",
+    "@prisma/client": "6.19.3",
+    "exceljs": "^4.4.0",
+    "next": "15.5.28",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "cross-env": "10.0.0",
+    "prisma": "6.19.3",
+    "tsx": "4.20.5",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}

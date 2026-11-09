@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PEMINJAM
+  PENGELOLA
+  ADMIN
+}
+
+enum OrganizationRole {
+  ANGGOTA
+  PENGURUS
+}
+
+enum ReservationType {
+  ORGANISASI
+  PRIBADI
+}
+
+enum ReservationStatus {
+  MENUNGGU_PERSETUJUAN
+  TERKONFIRMASI
+  DITOLAK
+  DIBATALKAN
+  KEDALUWARSA
+  SELESAI
+  GAGAL
+}
+
+enum NotificationType {
+  PENGAJUAN_DITERIMA
+  DISETUJUI
+  DITOLAK
+  DIBATALKAN_PENGELOLA
+  KEDALUWARSA
+  PENGAJUAN_BARU
+}
+
+enum DeliveryStatus {
+  PENDING
+  TERKIRIM
+  GAGAL
+}
+
+model User {
+  id             String               @id @default(cuid())
+  name           String
+  email          String               @unique
+  passwordHash   String?
+  role           Role                 @default(PEMINJAM)
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  memberships    OrganizationMember[]
+  managedRooms   RoomManager[]
+  reservations   Reservation[]
+  blocksCreated  SlotBlock[]          @relation("BlockCreatedBy")
+  statusChanges  StatusHistory[]      @relation("StatusActor")
+  notifications  Notification[]
+  sessions       Session[]
+  auditLogs      AuditLog[]          @relation("AuditActor")
+}
+
+model Organization {
+  id           String               @id @default(cuid())
+  name         String               @unique
+  category     String               @default("UKM")
+  advisor      String?
+  createdAt    DateTime             @default(now())
+  memberships  OrganizationMember[]
+  reservations Reservation[]
+}
+
+model OrganizationMember {
+  id             String           @id @default(cuid())
+  userId         String
+  organizationId String
+  role           OrganizationRole @default(ANGGOTA)
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model Room {
+  id                          String        @id @default(cuid())
+  name                        String
+  building                    String
+  floor                       String
+  capacity                    Int
+  facilities                  String        @default("[]")
+  roomType                    String        @default("serbaguna")
+  photoUrl                    String?
+  openTime                    String
+  closeTime                   String
+  requiresApproval            Boolean       @default(true)
+  maxDurationMinutes          Int           @default(120)
+  cancellationDeadlineMinutes Int           @default(0)
+  attachmentRequired          Boolean       @default(false)
+  active                      Boolean       @default(true)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+  managers                    RoomManager[]
+  reservations                Reservation[]
+  blocks                      SlotBlock[]
+
+  @@unique([name, building, floor])
+}
+
+model RoomManager {
+  id        String   @id @default(cuid())
+  roomId    String
+  userId    String
+  createdAt DateTime @default(now())
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model Reservation {
+  id             String            @id @default(cuid())
+  userId         String
+  roomId         String
+  organizationId String?
+  start          DateTime
+  end            DateTime
+  type           ReservationType
+  activityName   String
+  participantCount Int
+  status         ReservationStatus @default(MENUNGGU_PERSETUJUAN)
+  idempotencyKey String
+  attachmentUrl  String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  user           User              @relation(fields: [userId], references: [id])
+  room           Room              @relation(fields: [roomId], references: [id])
+  organization   Organization?     @relation(fields: [organizationId], references: [id])
+  history        StatusHistory[]
+  notifications  Notification[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([roomId, status, start, end])
+  @@index([userId, createdAt])
+}
+
+model SlotBlock {
+  id          String   @id @default(cuid())
+  roomId      String
+  start       DateTime
+  end         DateTime
+  reason      String
+  createdById String
+  createdAt   DateTime @default(now())
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("BlockCreatedBy", fields: [createdById], references: [id])
+
+  @@index([roomId, start, end])
+}
+
+model StatusHistory {
+  id            String             @id @default(cuid())
+  reservationId String
+  oldStatus     ReservationStatus?
+  newStatus     ReservationStatus
+  actorId       String?
+  reason        String?
+  createdAt     DateTime           @default(now())
+  reservation   Reservation        @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  actor         User?              @relation("StatusActor", fields: [actorId], references: [id])
+
+  @@index([reservationId, createdAt])
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  recipientId    String
+  reservationId  String?
+  type           NotificationType
+  deliveryStatus DeliveryStatus   @default(PENDING)
+  createdAt      DateTime         @default(now())
+  recipient      User             @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  reservation    Reservation?     @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, createdAt])
+}
+
+model SystemConfig {
+  id                   String   @id @default("default")
+  maxActiveReservations Int     @default(3)
+  maxAdvanceDays       Int      @default(30)
+  updatedAt            DateTime @updatedAt
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginThrottle {
+  key             String    @id
+  failedCount     Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String
+  metadata  String?
+  createdAt DateTime @default(now())
+  actor     User     @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
