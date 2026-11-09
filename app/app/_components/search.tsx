@@ -12,6 +12,10 @@ import {
   Users,
 } from "@/app/_components/icons";
 import { fromWitaDateTime, formatWitaDate } from "@/lib/wita";
+import {
+  createDemoReservation,
+  getBusyRoomIds,
+} from "@/lib/demo-store";
 import { useToast } from "./toast";
 import { Modal } from "./modal";
 import {
@@ -28,13 +32,14 @@ import {
   roomTypeLabel,
 } from "./ui";
 import type {
-  ApiError,
   OrganizationCatalogItem,
   Reservation,
   Room,
+  SessionUser,
 } from "@/app/app/types";
 
 type Props = {
+  user: SessionUser;
   organizationCatalog: OrganizationCatalogItem[];
   onViewReservations: () => void;
 };
@@ -58,6 +63,7 @@ const tomorrow = () => {
 };
 
 export function SearchExperience({
+  user,
   organizationCatalog,
   onViewReservations,
 }: Props) {
@@ -121,7 +127,11 @@ export function SearchExperience({
         );
       }
 
-      setRooms(payload.rooms ?? []);
+      const busy = getBusyRoomIds(start, end);
+      const available = ((payload.rooms ?? []) as Room[]).filter(
+        (room) => !busy.has(room.id),
+      );
+      setRooms(available);
     } catch (cause) {
       setSearchError(
         cause instanceof Error ? cause.message : "Pencarian gagal.",
@@ -186,37 +196,29 @@ export function SearchExperience({
     setFieldErrors({});
 
     try {
-      const response = await fetch("/api/reservations", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          roomId: selectedRoom.id,
-          start: start.toISOString(),
-          end: end.toISOString(),
-          type: reservationType,
-          organizationId:
-            reservationType === "ORGANISASI" ? organizationId : null,
-          activityName,
-          participantCount: Number(participants),
-          attachmentUrl: attachmentUrl.trim() || null,
-          idempotencyKey,
-        }),
+      const organization =
+        reservationType === "ORGANISASI"
+          ? organizationCatalog.find((item) => item.id === organizationId) ??
+            null
+          : null;
+
+      const created = createDemoReservation({
+        user,
+        room: selectedRoom,
+        organization: organization
+          ? { id: organization.id, name: organization.name }
+          : null,
+        start,
+        end,
+        type: reservationType,
+        activityName,
+        participantCount: Number(participants),
+        attachmentUrl: attachmentUrl.trim() || null,
       });
 
-      const payload = await response.json();
-
-      if (!response.ok) {
-        const apiError = payload as ApiError;
-        const fields = apiError.error?.fields ?? [];
-        setFieldErrors(
-          Object.fromEntries(fields.map((field) => [field.field, field.message])),
-        );
-        throw new Error(apiError.error?.message ?? "Pengajuan gagal.");
-      }
-
-      setTicket(payload.reservation as Reservation);
+      setTicket(created as Reservation);
       notify(
-        payload.reservation.status === "TERKONFIRMASI"
+        created.status === "TERKONFIRMASI"
           ? "Reservasi langsung terkonfirmasi."
           : "Pengajuan terkirim dan slot ditahan.",
         "success",

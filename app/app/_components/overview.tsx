@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { ArrowRight, Clock } from "@/app/_components/icons";
-import { useToast } from "./toast";
+import {
+  getPendingApprovals,
+  getReservationsForUser,
+  subscribeDemo,
+} from "@/lib/demo-store";
 import {
   DateChip,
   EmptyState,
@@ -15,7 +19,6 @@ import {
 } from "./ui";
 import type {
   Approval,
-  ApiError,
   Reservation,
   SessionUser,
 } from "@/app/app/types";
@@ -29,7 +32,6 @@ type Props = {
 const activeStatuses = ["MENUNGGU_PERSETUJUAN", "TERKONFIRMASI"];
 
 export function Overview({ user, canApprove, onNavigate }: Props) {
-  const { notify } = useToast();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,46 +40,34 @@ export function Overview({ user, canApprove, onNavigate }: Props) {
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
+    const load = () => {
       try {
-        const requests: Array<Promise<Response>> = [
-          fetch("/api/reservations", { cache: "no-store" }),
-        ];
-        if (canApprove) {
-          requests.push(fetch("/api/approvals", { cache: "no-store" }));
-        }
-
-        const responses = await Promise.all(requests);
-        if (responses.some((response) => !response.ok)) {
-          throw new Error("Gagal memuat ringkasan.");
-        }
-
-        const reservationData = await responses[0].json();
+        const nextReservations = getReservationsForUser(user.id);
         if (cancelled) return;
-        setReservations(reservationData.reservations ?? []);
-
-        if (responses[1]) {
-          const approvalData = await responses[1].json();
-          if (cancelled) return;
-          setApprovals(approvalData.approvals ?? []);
+        setReservations(nextReservations);
+        if (canApprove) {
+          setApprovals(getPendingApprovals() as Approval[]);
         }
+        setError(null);
       } catch (cause) {
         if (!cancelled) {
           setError(
             cause instanceof Error ? cause.message : "Gagal memuat ringkasan.",
           );
-          notify("Ringkasan belum dapat dimuat.", "error");
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
 
-    void load();
+    load();
+    const unsubscribe = subscribeDemo(load);
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [canApprove, notify]);
+  }, [canApprove, user.id]);
 
   const now = Date.now();
   const active = reservations.filter(

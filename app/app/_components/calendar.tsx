@@ -16,6 +16,7 @@ import {
 } from "@/lib/wita";
 import { EmptyState, ErrorNote, Skeleton } from "./ui";
 import { roomTypeLabel } from "./ui";
+import { getAllReservations, subscribeDemo } from "@/lib/demo-store";
 import type { CalendarRoom, CalendarSlot } from "@/lib/calendar";
 
 const WINDOW_START_HOUR = 6;
@@ -99,6 +100,13 @@ export function CalendarView() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("semua");
   const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [demoRevision, setDemoRevision] = useState(0);
+
+  useEffect(() => {
+    return subscribeDemo(() => {
+      setDemoRevision((value) => value + 1);
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,7 +127,38 @@ export function CalendarView() {
         }
 
         if (!cancelled) {
-          setData(payload);
+          const fromMs = new Date(payload.from as string).getTime();
+          const toMs = new Date(payload.to as string).getTime();
+          const local = getAllReservations();
+
+          const rooms = (payload.rooms as CalendarRoom[]).map((room) => {
+            const blocks = room.slots.filter(
+              (slot) => slot.kind === "BLOKIR",
+            );
+            const reservationSlots: CalendarSlot[] = local
+              .filter(
+                (reservation) =>
+                  reservation.roomId === room.id &&
+                  (reservation.status === "MENUNGGU_PERSETUJUAN" ||
+                    reservation.status === "TERKONFIRMASI") &&
+                  new Date(reservation.start).getTime() < toMs &&
+                  new Date(reservation.end).getTime() > fromMs,
+              )
+              .map((reservation) => ({
+                id: reservation.id,
+                kind: "RESERVASI" as const,
+                start: reservation.start,
+                end: reservation.end,
+                status: reservation.status,
+              }));
+
+            return {
+              ...room,
+              slots: [...blocks, ...reservationSlots],
+            };
+          });
+
+          setData({ ...payload, rooms });
         }
       } catch (cause) {
         if (!cancelled) {
@@ -138,7 +177,7 @@ export function CalendarView() {
     return () => {
       cancelled = true;
     };
-  }, [date]);
+  }, [date, demoRevision]);
 
   const week = useMemo(() => {
     const monday = shiftDate(date, -weekdayIndex(date));

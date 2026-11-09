@@ -13,17 +13,24 @@ import {
 import { useToast } from "./toast";
 import { Modal } from "./modal";
 import {
+  approveDemoReservation,
+  getApprovalHistory,
+  getPendingApprovals,
+  rejectDemoReservation,
+  subscribeDemo,
+} from "@/lib/demo-store";
+import {
   DateChip,
   EmptyState,
   ErrorNote,
   formatDateLong,
   formatTimeRange,
 } from "./ui";
-import type { Approval } from "@/app/app/types";
+import type { Approval, SessionUser } from "@/app/app/types";
 
 type Action = "approve" | "reject";
 
-export function ApprovalQueue() {
+export function ApprovalQueue({ user }: { user: SessionUser }) {
   const { notify } = useToast();
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [history, setHistory] = useState<Approval[]>([]);
@@ -40,13 +47,8 @@ export function ApprovalQueue() {
     setError(null);
 
     try {
-      const response = await fetch("/api/approvals", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Gagal memuat antrean.");
-      }
-      setApprovals(payload.approvals ?? []);
-      setHistory(payload.history ?? []);
+      setApprovals(getPendingApprovals() as Approval[]);
+      setHistory(getApprovalHistory() as Approval[]);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Gagal memuat antrean.",
@@ -58,6 +60,9 @@ export function ApprovalQueue() {
 
   useEffect(() => {
     void load();
+    return subscribeDemo(() => {
+      void load();
+    });
   }, [load]);
 
   const openAction = (approval: Approval, nextAction: Action) => {
@@ -79,18 +84,10 @@ export function ApprovalQueue() {
     setActionError(null);
 
     try {
-      const response = await fetch(
-        `/api/approvals/${target.id}/${action}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ reason: note.trim() || null }),
-        },
-      );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Keputusan gagal disimpan.");
+      if (action === "approve") {
+        approveDemoReservation(target.id, user.id, note.trim() || null);
+      } else {
+        rejectDemoReservation(target.id, user.id, note.trim());
       }
 
       notify(

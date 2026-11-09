@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Download, Refresh } from "@/app/_components/icons";
-import { fromWitaDateTime, formatWitaDate } from "@/lib/wita";
+import {
+  fromWitaDateTime,
+  formatWitaDate,
+  formatWitaTime,
+} from "@/lib/wita";
+import { getAllReservations, subscribeDemo } from "@/lib/demo-store";
 import {
   EmptyState,
   ErrorNote,
@@ -11,7 +16,12 @@ import {
   formatDateShort,
   statusLabel,
 } from "./ui";
-import type { ReservationStatus, Room, UsageReport } from "@/app/app/types";
+import type {
+  ReservationStatus,
+  Room,
+  UsageDetail,
+  UsageReport,
+} from "@/app/app/types";
 
 const statusOrder: ReservationStatus[] = [
   "MENUNGGU_PERSETUJUAN",
@@ -35,6 +45,13 @@ export function ReportPanel({ role }: { role: "PEMINJAM" | "PENGELOLA" | "ADMIN"
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [roomsLoading, setRoomsLoading] = useState(true);
+  const [demoRevision, setDemoRevision] = useState(0);
+
+  useEffect(() => {
+    return subscribeDemo(() => {
+      setDemoRevision((value) => value + 1);
+    });
+  }, []);
 
   const loadRooms = useCallback(async () => {
     setRoomsLoading(true);
@@ -93,14 +110,74 @@ export function ReportPanel({ role }: { role: "PEMINJAM" | "PENGELOLA" | "ADMIN"
       if (!response.ok) {
         throw new Error(payload?.error?.message ?? "Gagal memuat rekap.");
       }
-      setReport(payload.report as UsageReport);
+
+      const base = payload.report as UsageReport;
+      const period = getAllReservations().filter((reservation) => {
+        const startTime = new Date(reservation.start).getTime();
+        return (
+          reservation.roomId === selectedId &&
+          startTime >= start.getTime() &&
+          startTime < end.getTime()
+        );
+      });
+
+      const byStatus = Object.fromEntries(
+        statusOrder.map((status) => [status, 0]),
+      ) as Record<ReservationStatus, number>;
+
+      let usedMinutes = 0;
+
+      for (const reservation of period) {
+        byStatus[reservation.status] += 1;
+        if (
+          reservation.status === "TERKONFIRMASI" ||
+          reservation.status === "SELESAI"
+        ) {
+          usedMinutes +=
+            (new Date(reservation.end).getTime() -
+              new Date(reservation.start).getTime()) /
+            60_000;
+        }
+      }
+
+      const details: UsageDetail[] = period.map((reservation) => {
+        const startDate = new Date(reservation.start);
+        const endDate = new Date(reservation.end);
+        const durationMinutes =
+          (endDate.getTime() - startDate.getTime()) / 60_000;
+
+        return {
+          id: reservation.id,
+          status: reservation.status,
+          statusLabel: statusLabel(reservation.status),
+          date: formatWitaDate(startDate),
+          start: formatWitaTime(startDate),
+          end: formatWitaTime(endDate),
+          durationHours: Math.round((durationMinutes / 60) * 100) / 100,
+          activityName: reservation.activityName,
+          participantCount: reservation.participantCount,
+          type: reservation.type,
+          organizationName: reservation.organization?.name ?? null,
+          borrowerName: reservation.user.name,
+          approvalCardUrl: null,
+        };
+      });
+
+      setReport({
+        ...base,
+        totalReservations: period.length,
+        usedHours: Math.round((usedMinutes / 60) * 100) / 100,
+        cancellations: byStatus.DIBATALKAN,
+        byStatus,
+        details,
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal memuat rekap.");
       setReport(null);
     } finally {
       setLoading(false);
     }
-  }, [selectedId, from, to]);
+  }, [selectedId, from, to, demoRevision]);
 
   useEffect(() => {
     if (selectedId) {

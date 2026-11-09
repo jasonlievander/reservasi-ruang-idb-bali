@@ -866,6 +866,13 @@ button {
   font-size: 0.76rem;
 }
 
+.app-footer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+}
+
 /* Login */
 .login-page {
   display: grid;

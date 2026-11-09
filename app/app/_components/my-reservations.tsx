@@ -12,6 +12,11 @@ import {
 import { useToast } from "./toast";
 import { Modal } from "./modal";
 import {
+  cancelDemoReservation,
+  getReservationsForUser,
+  subscribeDemo,
+} from "@/lib/demo-store";
+import {
   DateChip,
   EmptyState,
   ErrorNote,
@@ -20,12 +25,12 @@ import {
   formatTimeRange,
   statusLabel,
 } from "./ui";
-import type { Reservation } from "@/app/app/types";
+import type { Reservation, SessionUser } from "@/app/app/types";
 
 const activeStatuses = ["MENUNGGU_PERSETUJUAN", "TERKONFIRMASI"];
 type Filter = "aktif" | "semua" | "riwayat";
 
-export function MyReservations() {
+export function MyReservations({ user }: { user: SessionUser }) {
   const { notify } = useToast();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,12 +46,7 @@ export function MyReservations() {
     setError(null);
 
     try {
-      const response = await fetch("/api/reservations", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Gagal memuat reservasi.");
-      }
-      setReservations(payload.reservations ?? []);
+      setReservations(getReservationsForUser(user.id));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Gagal memuat reservasi.",
@@ -54,10 +54,13 @@ export function MyReservations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user.id]);
 
   useEffect(() => {
     void load();
+    return subscribeDemo(() => {
+      void load();
+    });
   }, [load]);
 
   const now = Date.now();
@@ -88,19 +91,11 @@ export function MyReservations() {
     setCancelError(null);
 
     try {
-      const response = await fetch(
-        `/api/reservations/${cancelTarget.id}/cancel`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ reason: reason.trim() || null }),
-        },
+      cancelDemoReservation(
+        cancelTarget.id,
+        user.id,
+        reason.trim() || null,
       );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload?.error?.message ?? "Pembatalan gagal.");
-      }
 
       notify("Reservasi dibatalkan. Slot kembali tersedia.", "success");
       setCancelTarget(null);

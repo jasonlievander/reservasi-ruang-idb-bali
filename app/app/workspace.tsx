@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut } from "@/app/_components/icons";
+import { LogOut, Refresh } from "@/app/_components/icons";
+import { resetDemoData } from "@/lib/demo-store";
 import { ToastProvider } from "./_components/toast";
 import { initials, roleLabel } from "./_components/ui";
 import { Overview } from "./_components/overview";
@@ -105,11 +106,23 @@ export function Workspace({
     }
   };
 
+  const resetDemo = () => {
+    if (
+      window.confirm(
+        "Reset data demo? Reservasi yang dibuat dan perubahan status akan dihapus.",
+      )
+    ) {
+      resetDemoData();
+      window.location.reload();
+    }
+  };
+
   const content = useMemo(() => {
     switch (tab) {
       case "cari":
         return (
           <SearchExperience
+            user={user}
             organizationCatalog={organizationCatalog}
             onViewReservations={() => selectTab("reservasi")}
           />
@@ -117,9 +130,9 @@ export function Workspace({
       case "kalender":
         return <CalendarView />;
       case "reservasi":
-        return <MyReservations />;
+        return <MyReservations user={user} />;
       case "persetujuan":
-        return <ApprovalQueue />;
+        return <ApprovalQueue user={user} />;
       case "ruangan":
         return <RoomManager />;
       case "rekap":
@@ -200,8 +213,13 @@ export function Workspace({
         <main className="app-main">{content}</main>
 
         <footer className="app-footer">
-            <span>SIRU · Sistem Reservasi Ruangan IDB Bali</span>
-          <span className="mono-label">WITA · UTC+8</span>
+          <span>SIRU A� Sistem Reservasi Ruangan IDB Bali</span>
+          <div className="app-footer__meta">
+            <button type="button" className="text-button" onClick={resetDemo}>
+              <Refresh size={14} /> Reset data demo
+            </button>
+            <span className="mono-label">WITA A� UTC+8</span>
+          </div>
         </footer>
       </div>
     </ToastProvider>
