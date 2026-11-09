@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { PrismaClient, User } from "@prisma/client";
 import { prisma as defaultDb } from "@/lib/prisma";
 
@@ -15,8 +15,57 @@ type SessionOptions = {
   now?: Date;
 };
 
-const tokenHash = (token: string) =>
-  createHash("sha256").update(token).digest("hex");
+type SessionPayload = {
+  sub: string;
+  exp: number;
+};
+
+const SESSION_SECRET =
+  process.env.DEMO_SESSION_SECRET ?? "siru-demo-session-secret";
+
+const sign = (value: string) =>
+  createHmac("sha256", SESSION_SECRET).update(value).digest("base64url");
+
+const encodeToken = (payload: SessionPayload) => {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${body}.${sign(body)}`;
+};
+
+const decodeToken = (token: string): SessionPayload | null => {
+  const [body, signature] = token.split(".");
+  if (!body || !signature) {
+    return null;
+  }
+
+  const expected = sign(body);
+  const providedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return null;
+  }
+
+  if (!timingSafeEqual(providedBuffer, expectedBuffer)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(body, "base64url").toString("utf8"),
+    ) as SessionPayload;
+
+    if (
+      typeof parsed.sub !== "string" ||
+      typeof parsed.exp !== "number"
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+};
 
 export function readSessionToken(request: Request): string | null {
   const header = request.headers.get("cookie");
@@ -39,20 +88,13 @@ export async function createSession(
   userId: string,
   options: SessionOptions = {},
 ): Promise<{ token: string; expiresAt: Date }> {
-  const db = options.db ?? defaultDb;
   const now = options.now ?? new Date();
-  const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS);
 
-  await db.session.create({
-    data: {
-      tokenHash: tokenHash(token),
-      userId,
-      expiresAt,
-    },
-  });
-
-  return { token, expiresAt };
+  return {
+    token: encodeToken({ sub: userId, exp: expiresAt.getTime() }),
+    expiresAt,
+  };
 }
 
 export async function getSessionUser(
@@ -63,29 +105,29 @@ export async function getSessionUser(
     return null;
   }
 
-  const db = options.db ?? defaultDb;
+  const payload = decodeToken(token);
+  if (!payload) {
+    return null;
+  }
+
   const now = options.now ?? new Date();
+  if (payload.exp <= now.getTime()) {
+    return null;
+  }
 
-  const session = await db.session.findUnique({
-    where: { tokenHash: tokenHash(token) },
-    include: { user: true },
-  });
+  const db = options.db ?? defaultDb;
+  const user = await db.user.findUnique({ where: { id: payload.sub } });
 
-  if (
-    !session ||
-    session.revokedAt !== null ||
-    session.expiresAt.getTime() <= now.getTime() ||
-    !session.user.active
-  ) {
+  if (!user || !user.active) {
     return null;
   }
 
   return {
-    id: session.user.id,
-    name: session.user.name,
-    email: session.user.email,
-    role: session.user.role,
-    active: session.user.active,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    active: user.active,
   };
 }
 
@@ -93,15 +135,6 @@ export async function revokeSession(
   token: string | null,
   options: SessionOptions = {},
 ): Promise<void> {
-  if (!token) {
-    return;
-  }
-
-  const db = options.db ?? defaultDb;
-  const now = options.now ?? new Date();
-
-  await db.session.updateMany({
-    where: { tokenHash: tokenHash(token), revokedAt: null },
-    data: { revokedAt: now },
-  });
+  void token;
+  void options;
 }

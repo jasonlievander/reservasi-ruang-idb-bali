@@ -1,15 +1,11 @@
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+import { createDb } from "@/lib/demo-db";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient;
+const globalForDemo = globalThis as unknown as {
+  siruDemoDb?: ReturnType<typeof createDb>;
 };
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
+const demoDb = globalForDemo.siruDemoDb ?? createDb();
+globalForDemo.siruDemoDb = demoDb;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+export const prisma = demoDb as unknown as PrismaClient;

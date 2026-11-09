@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { generateApprovalCard } from "@/lib/approval-card";
 import {
   notifyBorrowerStatus,
@@ -297,11 +297,6 @@ export async function approveReservation(
         reviewerName: reviewer?.name ?? null,
       };
     },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 5_000,
-      timeout: 10_000,
-    },
   );
 
   await generateApprovalCard({
@@ -397,11 +392,6 @@ export async function rejectReservation(
       return tx.reservation.findUniqueOrThrow({
         where: { id: reservation.id },
       });
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 5_000,
-      timeout: 10_000,
     },
   );
 

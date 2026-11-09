@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import {
   notifyBorrowerStatus,
   tryNotify,
@@ -181,11 +181,6 @@ export async function cancelReservation(
       return tx.reservation.findUniqueOrThrow({
         where: { id: reservation.id },
       });
-    },
-    {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      maxWait: 5_000,
-      timeout: 10_000,
     },
   );
 

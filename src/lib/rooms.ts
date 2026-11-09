@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, type Room } from "@prisma/client";
+import type { Prisma, PrismaClient, Room } from "@prisma/client";
 import { prisma as defaultDb } from "@/lib/prisma";
 import { isSameWitaDay, parseTimeOfDay, witaMillisecondsOfDay } from "@/lib/wita";
 
@@ -555,10 +555,7 @@ export async function updateRoom(
     });
     return toRoomView(updated);
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if ((error as { code?: string }).code === "P2002") {
       throw new RoomError(
         "ROOM_CONFLICT",
         "Ruangan dengan nama, gedung, dan lantai tersebut sudah ada.",

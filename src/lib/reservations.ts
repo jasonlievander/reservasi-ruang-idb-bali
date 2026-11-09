@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient, type Reservation } from "@prisma/client";
+import type { PrismaClient, Reservation } from "@prisma/client";
 import { generateApprovalCard } from "@/lib/approval-card";
 import {
   notifyNewSubmission,
@@ -453,11 +453,6 @@ export async function createReservation(
         });
 
         return { reservation, created: true };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        maxWait: 5_000,
-        timeout: 10_000,
       },
     ),
   );
