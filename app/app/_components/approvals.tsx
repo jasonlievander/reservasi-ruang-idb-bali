@@ -13,6 +13,11 @@ import {
 import { useToast } from "./toast";
 import { Modal } from "./modal";
 import {
+  approvalCardFileName,
+  downloadDataUrl,
+  generateApprovalCardDataUrl,
+} from "@/lib/approval-card-client";
+import {
   approveDemoReservation,
   getApprovalHistory,
   getPendingApprovals,
@@ -41,6 +46,7 @@ export function ApprovalQueue({ user }: { user: SessionUser }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [cardBusyId, setCardBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,6 +76,43 @@ export function ApprovalQueue({ user }: { user: SessionUser }) {
     setAction(nextAction);
     setNote("");
     setActionError(null);
+  };
+
+  const downloadCard = async (item: Approval) => {
+    setCardBusyId(item.id);
+    try {
+      const history = (
+        item as unknown as {
+          history?: Array<{ newStatus: string; actorId: string | null }>;
+        }
+      ).history;
+      const approvedEntry = [...(history ?? [])]
+        .reverse()
+        .find((entry) => entry.newStatus === "TERKONFIRMASI");
+
+      const dataUrl = await generateApprovalCardDataUrl({
+        reservationId: item.id,
+        roomName: item.room.name,
+        building: item.room.building,
+        floor: item.room.floor,
+        start: new Date(item.start),
+        end: new Date(item.end),
+        activityName: item.activityName,
+        participantCount: item.participantCount,
+        borrowerName: item.user.name,
+        approverName:
+          approvedEntry?.actorId === user.id ? user.name : null,
+      });
+
+      downloadDataUrl(dataUrl, approvalCardFileName(item.id));
+    } catch (cause) {
+      notify(
+        cause instanceof Error ? cause.message : "Kartu gagal dibuat.",
+        "error",
+      );
+    } finally {
+      setCardBusyId(null);
+    }
   };
 
   const submit = async () => {
@@ -308,17 +351,16 @@ export function ApprovalQueue({ user }: { user: SessionUser }) {
                 </div>
 
                 <div className="approval-card__actions">
-                  {item.approvalCardUrl ? (
-                    <a
-                      className="btn btn--dark"
-                      href={item.approvalCardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download
-                    >
-                      <Download size={17} /> Kartu
-                    </a>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn--dark"
+                    onClick={() => void downloadCard(item)}
+                    disabled={cardBusyId === item.id}
+                    aria-busy={cardBusyId === item.id}
+                  >
+                    <Download size={17} />
+                    {cardBusyId === item.id ? "Menyiapkan..." : "Kartu"}
+                  </button>
                 </div>
               </article>
             ))}

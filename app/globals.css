@@ -1998,6 +1998,24 @@ button {
   text-underline-offset: 3px;
 }
 
+button.inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.inline-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Room manager */
 .manager-grid {
   display: grid;

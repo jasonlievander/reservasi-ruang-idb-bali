@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Calendar,
   Clock,
+  Download,
   Refresh,
   Ticket,
   Users,
@@ -11,6 +12,11 @@ import {
 } from "@/app/_components/icons";
 import { useToast } from "./toast";
 import { Modal } from "./modal";
+import {
+  approvalCardFileName,
+  downloadDataUrl,
+  generateApprovalCardDataUrl,
+} from "@/lib/approval-card-client";
 import {
   cancelDemoReservation,
   getReservationsForUser,
@@ -40,6 +46,7 @@ export function MyReservations({ user }: { user: SessionUser }) {
   const [reason, setReason] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cardBusyId, setCardBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +90,38 @@ export function MyReservations({ user }: { user: SessionUser }) {
     setCancelTarget(reservation);
     setReason("");
     setCancelError(null);
+  };
+
+  const downloadCard = async (reservation: Reservation) => {
+    setCardBusyId(reservation.id);
+    try {
+      const approvedEntry = [...reservation.history]
+        .reverse()
+        .find((entry) => entry.newStatus === "TERKONFIRMASI");
+
+      const dataUrl = await generateApprovalCardDataUrl({
+        reservationId: reservation.id,
+        roomName: reservation.room.name,
+        building: reservation.room.building,
+        floor: reservation.room.floor,
+        start: new Date(reservation.start),
+        end: new Date(reservation.end),
+        activityName: reservation.activityName,
+        participantCount: reservation.participantCount,
+        borrowerName: user.name,
+        approverName:
+          approvedEntry?.actorId === user.id ? user.name : null,
+      });
+
+      downloadDataUrl(dataUrl, approvalCardFileName(reservation.id));
+    } catch (cause) {
+      notify(
+        cause instanceof Error ? cause.message : "Kartu gagal dibuat.",
+        "error",
+      );
+    } finally {
+      setCardBusyId(null);
+    }
   };
 
   const submitCancel = async () => {
@@ -216,17 +255,20 @@ export function MyReservations({ user }: { user: SessionUser }) {
                     </p>
                   ) : null}
 
-                  {reservation.status === "TERKONFIRMASI" &&
-                  reservation.approvalCardUrl ? (
-                    <a
+                  {reservation.status === "TERKONFIRMASI" ||
+                  reservation.status === "SELESAI" ? (
+                    <button
+                      type="button"
                       className="inline-link"
-                      href={reservation.approvalCardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download
+                      onClick={() => void downloadCard(reservation)}
+                      disabled={cardBusyId === reservation.id}
+                      aria-busy={cardBusyId === reservation.id}
                     >
-                      Unduh Kartu Persetujuan Ruangan
-                    </a>
+                      <Download size={15} />{" "}
+                      {cardBusyId === reservation.id
+                        ? "Menyiapkan kartu..."
+                        : "Unduh Kartu Persetujuan Ruangan"}
+                    </button>
                   ) : null}
 
                   <details className="history">
